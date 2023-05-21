@@ -1,7 +1,11 @@
+#include <arpa/inet.h>
+#include <sys/socket.h>
+
 #define SNAKE_INACTIVE 0
 #define SNAKE_ACTIVE_CLIENT 1
 #define SNAKE_ACTIVE_SERVER 2
 #define SNAKE_MODE_TCP 0
+
 class NetSnake{
 	private:
 	int socketDescriptor;
@@ -105,6 +109,6 @@ class NetSnake{
 	 * Server Functions
 	 * */
 	bool createInetServer(){
-	
+		return false;
 	}
 };

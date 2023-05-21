@@ -6,9 +6,7 @@
 #include <dlfcn.h>
 #include <string.h>
 #include <string>
-#include <sys/socket.h>
 #include <signal.h>
-#include <arpa/inet.h>
 #include <iostream>
 
 using namespace std;
