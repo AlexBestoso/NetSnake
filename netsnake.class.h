@@ -1,6 +1,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netdb.h>
 
 #define SNAKE_INACTIVE 0
 #define SNAKE_ACTIVE_CLIENT 1
@@ -21,6 +22,7 @@ class NetSnake{
 		string host;
 		char buffer[SNAKE_MAX_BUFFER];
 		struct sockaddr_in sockAddr;
+		struct hostent *host_domain;
 	
 		bool connectTcpClient(){
 			if(this->isActive != SNAKE_ACTIVE_CLIENT){
@@ -47,9 +49,13 @@ class NetSnake{
 			this->sockAddr.sin_port = htons(this->port);
 			
 			if(inet_pton(AF_INET, this->host.c_str(), &this->sockAddr.sin_addr) <= 0){
-				fprintf(stderr, "Invalid Host Name.\n");
-				this->socketDescriptor = -1;
-				return false;
+				host_domain = gethostbyname(host.c_str());
+				if(host_domain == NULL){
+					fprintf(stderr, "Invalid Host Name.\n");
+					this->socketDescriptor = -1;
+					return false;
+				}
+				sockAddr.sin_addr = *((struct in_addr *)host_domain->h_addr);
 			}
 	
 			
