@@ -239,6 +239,15 @@ class NetSnake{
 			return true;
 		}
 
+		string getClientIp(void){
+			string ret = "";
+			struct in_addr ipv4 = serverAddress.sin_addr;
+			char ipBuff[INET_ADDRSTRLEN];
+			inet_ntop(AF_INET, &ipv4, ipBuff, INET_ADDRSTRLEN);
+			ret = ipBuff;
+			return ret;
+		}
+
 		bool serverSend(const char *buffer, size_t bufferSize){
                         if(server_newSocket < 0){
                                 failed = true;

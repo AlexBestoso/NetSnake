@@ -49,6 +49,7 @@ int main(){
 			return 1;
 		}
 
+		printf("Connection from IP %s\n", netSnake.getClientIp().c_str());
 
 		string msg = "This is my test. You have passed it.\n";
 		if(!netSnake.serverSend(msg.c_str(), msg.length())){
