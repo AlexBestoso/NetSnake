@@ -2,6 +2,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <sys/un.h>
 
 #define SNAKE_INACTIVE 0
 #define SNAKE_ACTIVE_CLIENT 1
@@ -74,6 +75,21 @@ class NetSnake{
 		char server_buffer[8192];
 		int server_port = -1;
 		bool guestConnected = false;
+
+		/*
+		 * AF_UNIX server variables.
+		 * */
+		string unixserver_serverPath = "";
+		int unixserver_socketDescriptor = -1;
+		int unixserver_connectionDescriptor = -1;
+		struct sockaddr_un unixserver_serverAddress;
+
+		/*
+		 * AF_UNIX client variables
+		 * */
+		string unixclient_serverPath = "";
+		int unixclient_socketDescriptor = -1;
+		struct sockaddr_un unixclient_serverAddress;
 
 		/*
 		 * Misc variables and functions
@@ -261,6 +277,163 @@ class NetSnake{
                                 errorMsg = "Failed to send data to the guest.";
                                 return false;
                         }
+                        return true;
+                }
+
+		/*
+		 * AF Unix client and server functions
+		 * */
+		// unix server code
+		void unixKillServer(){
+			close(unixserver_connectionDescriptor);
+			close(unixserver_socketDescriptor);
+			unixRemoveSocket();
+		}
+		void unixRemoveSocket(){
+			if(unixserver_serverPath != ""){
+				unlink(unixserver_serverPath.c_str());
+			}
+		}
+		void unixCloseConnection(void){
+			close(unixserver_connectionDescriptor);
+		}
+		bool createUnixServer(string path){
+			failed = false;
+			unixserver_serverPath = path;
+			unixserver_socketDescriptor = socket(AF_UNIX, SOCK_STREAM, 0);
+
+			if(unixserver_socketDescriptor < 0){
+				errorMsg = "Failed to create af_unix server socket.";
+				failed = true;
+				return false;
+			}
+
+			memset(&unixserver_serverAddress, 0, sizeof(unixserver_serverAddress));
+			unixserver_serverAddress.sun_family = AF_UNIX;
+			strcpy(unixserver_serverAddress.sun_path, path.c_str());
+
+			if(bind(unixserver_socketDescriptor, (struct sockaddr *)&unixserver_serverAddress, SUN_LEN(&unixserver_serverAddress)) < 0){
+				unixKillServer();
+				failed = true;
+				errorMsg = "Failed to bind af_unix server socket.";
+				return false;
+			}
+			return true;
+		}
+
+		bool unixListenAndConnect(void){
+			if(listen(unixserver_socketDescriptor, 10)){
+				unixKillServer();
+				failed = true;
+				errorMsg = "Failed to listen for incoming af_unix connections.";
+				return false;
+			}
+
+			unixserver_connectionDescriptor = accept(unixserver_socketDescriptor, NULL, NULL);
+			if(unixserver_connectionDescriptor < 0){
+				failed = true;
+				errorMsg = "Failed to accept af_unix connection.";
+				return false;
+			}
+			return true;
+		}
+
+		bool unixServerRecv(char *buffer, size_t bufferSize, int posRecv){
+                        memset(buffer, 0x00, bufferSize);
+                        if(unixserver_connectionDescriptor < 0){
+                                failed = true;
+                                errorMsg = "Guest not connectd.";
+                                unixCloseConnection();
+                                return false;
+                        }
+
+                        if((this->server_recvSize = recv(this->unixserver_connectionDescriptor, buffer, bufferSize, posRecv)) < 0){
+                                failed = true;
+                                errorMsg = "Failed to receive data from the guest.";
+                                return false;
+                        }
+                        return true;
+                }
+
+		bool unixServerSend(const char *buffer, size_t bufferSize){
+                        if(unixserver_connectionDescriptor < 0){
+                                failed = true;
+                                errorMsg = "Guest not connectd.";
+                                unixCloseConnection();
+                                return false;
+                        }
+
+                        if((this->server_sendSize = send(this->unixserver_connectionDescriptor, buffer, bufferSize, 0)) < 0){
+                                failed = true;
+                                errorMsg = "Failed to send data to the guest.";
+                                return false;
+                        }
+                        return true;
+                }
+
+		// unix client code
+		void unixClientClose(void){
+			close(unixclient_socketDescriptor);
+		}
+		bool createUnixClient(string path){
+			unixclient_serverPath = path;
+			failed = false;
+			unixclient_socketDescriptor = socket(AF_UNIX, SOCK_STREAM, 0);
+			if(unixclient_socketDescriptor < 0){
+				failed = true;
+				errorMsg = "Failed to create af_unix client socket.";
+				return false;
+			}
+
+			memset(&unixclient_serverAddress, 0, sizeof(unixclient_serverAddress));
+			unixclient_serverAddress.sun_family = AF_UNIX;
+			strcpy(unixclient_serverAddress.sun_path, path.c_str());
+
+			if(connect(unixclient_socketDescriptor, (struct sockaddr *)&unixclient_serverAddress, SUN_LEN(&unixclient_serverAddress)) < 0){
+				failed = true;
+				errorMsg = "Failed to connect to af_unix socket.";
+				unixClientClose();
+				return false;
+			}
+			return true;
+		}
+
+		bool unixClientRecv(char *buffer, size_t bufferSize, int posRecv){
+                        failed = false;
+                        errorMsg = "";
+                        /*if(!this->isConnected){
+                                if(!this->connectTcpClient()){
+                                        failed = true;
+                                        errorMsg = "Failed to connect your client to the server.";
+                                        return false;
+                                }
+                        }*/
+                        memset(buffer, 0x00, bufferSize);
+                        if((this->recvSize = recv(unixclient_socketDescriptor, buffer, bufferSize, posRecv)) < 0){
+                                failed = true;
+                                errorMsg = "Failed to receive data from the target server,";
+                                return false;
+                        }
+
+                        return true;
+                }
+
+                bool unixClientSend(const char *buffer, size_t bufferSize){
+                        failed = false;
+                        errorMsg = "";
+                        /*if(!this->isConnected){
+                                if(!this->connectTcpClient()){
+                                        failed = true;
+                                        errorMsg = "Failed to connect your client to the server.";
+                                        return false;
+                                }
+                        }*/
+                        if((this->sendSize = send(unixclient_socketDescriptor, buffer, bufferSize, 0)) < 0){
+                                failed = true;
+                                errorMsg = "Failed to send data to the server.";
+                                return false;
+                        }
+
                         return true;
                 }
 };
